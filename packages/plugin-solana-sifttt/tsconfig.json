@@ -2,7 +2,11 @@
     "extends": "../core/tsconfig.json",
     "compilerOptions": {
         "outDir": "dist",
-        "rootDir": "src"
+        "rootDir": "src",
+        "types": ["node"],
+        "moduleResolution": "node",
+        "resolveJsonModule": true,
+        "allowImportingTsExtensions": false
     },
     "include": ["src/**/*.ts"]
 }

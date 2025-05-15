@@ -13,9 +13,9 @@ import {
 } from "@elizaos/core";
 import { Connection, type PublicKey, VersionedTransaction } from "@solana/web3.js";
 import BigNumber from "bignumber.js";
-import { getWalletKey } from "../keypairUtils.ts";
-import { walletProvider, WalletProvider } from "../providers/wallet.ts";
-import { getTokenDecimals } from "./swapUtils.ts";
+import { getWalletKey } from "../keypairUtils";
+import { walletProvider, WalletProvider } from "../providers/wallet";
+import { getTokenDecimals } from "./swapUtils";
 
 async function swapToken(
     connection: Connection,

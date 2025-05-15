@@ -14,10 +14,10 @@ import {
 } from "@elizaos/core";
 import { TrustScoreDatabase } from "@elizaos/plugin-trustdb";
 import { Connection } from "@solana/web3.js";
-import { getWalletKey } from "../keypairUtils.ts";
-import { TokenProvider } from "../providers/token.ts";
-import { TrustScoreManager } from "../providers/trustScoreProvider.ts";
-import { WalletProvider } from "../providers/wallet.ts";
+import { getWalletKey } from "../keypairUtils";
+import { TokenProvider } from "../providers/token";
+import { TrustScoreManager } from "../providers/trustScoreProvider";
+import { WalletProvider } from "../providers/wallet";
 
 const shouldProcessTemplate =
     `# Task: Decide if the recent messages should be processed for token recommendations.

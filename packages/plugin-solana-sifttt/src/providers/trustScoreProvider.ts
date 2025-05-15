@@ -16,10 +16,10 @@ import {
 import { getAssociatedTokenAddress } from "@solana/spl-token";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { v4 as uuidv4 } from "uuid";
-import type { ProcessedTokenData, TokenSecurityData } from "../types/token.ts";
-import { SimulationSellingService } from "./simulationSellingService.ts";
-import type { TokenProvider } from "./token.ts";
-import { WalletProvider } from "./wallet.ts";
+import type { ProcessedTokenData, TokenSecurityData } from "../types/token";
+import { SimulationSellingService } from "./simulationSellingService";
+import type { TokenProvider } from "./token";
+import { WalletProvider } from "./wallet";
 
 const Wallet = settings.MAIN_WALLET_ADDRESS;
 interface TradeData {
