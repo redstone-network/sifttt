@@ -1,3 +1,6 @@
 [submodule "characters"]
 	path = characters
 	url = https://github.com/elizaos/characters
+[submodule "sifttt-contract"]
+	path = sifttt-contract
+	url = https://github.com/redstone-network/sifttt-contract.git
