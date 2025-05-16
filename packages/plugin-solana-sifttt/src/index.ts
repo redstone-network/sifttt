@@ -16,7 +16,7 @@ import take_order from "./actions/takeOrder";
 import pumpfun from "./actions/pumpfun";
 import fomo from "./actions/fomo";
 import { executeSwapForDAO } from "./actions/swapDao";
-import { ProtectionService } from "./services/protection_service";
+import { protectionService } from "./services/protection_service";
 export { TokenProvider, WalletProvider, getTokenBalance, getTokenBalances };
 export const solanaPlugin: Plugin = {
     name: "solana",
@@ -32,6 +32,6 @@ export const solanaPlugin: Plugin = {
     ],
     evaluators: [trustEvaluator],
     providers: [walletProvider, trustScoreProvider],
-    services: [ProtectionService],
+    services: [protectionService],
 };
 export default solanaPlugin;

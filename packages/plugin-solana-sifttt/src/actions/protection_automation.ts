@@ -1,6 +1,13 @@
-import { PublicKey, Connection, Keypair, Transaction } from '@solana/web3.js';
-import { Program, AnchorProvider, web3, BN } from '@project-serum/anchor';
-import { IDL } from '../idl/sifttt';
+import { 
+    PublicKey, 
+    Connection, 
+    Keypair, 
+    Transaction, 
+    SystemProgram,
+    TransactionInstruction,
+    sendAndConfirmTransaction,
+    LAMPORTS_PER_SOL
+} from '@solana/web3.js';
 import { elizaLogger } from "@elizaos/core";
 import bs58 from "bs58";
 import {
@@ -19,8 +26,25 @@ import {
 
 import { walletProvider } from "../providers/wallet";
 
-// Contract program ID - should match the ID in the contract
-const PROGRAM_ID = new PublicKey('BU5JMEZ6mwqjSBMWTrh2NF96SMHdjz5JU3nk526LjPdA');
+// Contract program ID
+const PROGRAM_ID = new PublicKey('BcVC4hSBRyhAcgbLJPkcTYQrZuNHnss8mPCse2C3FGFT');
+
+// 指令的discriminator
+const INSTRUCTION_DISCRIMINATOR = {
+    INITIALIZE: Buffer.from([97, 97, 97, 97, 97, 97, 97, 97]), // 8 bytes
+    SET_AUTOMATION: Buffer.from([98, 98, 98, 98, 98, 98, 98, 98]),
+    BORROW: Buffer.from([99, 99, 99, 99, 99, 99, 99, 99]),
+    REPAY: Buffer.from([100, 100, 100, 100, 100, 100, 100, 100]),
+    AUTO_REPAY: Buffer.from([101, 101, 101, 101, 101, 101, 101, 101])
+};
+
+// 账户状态数据结构
+interface AccountState {
+    healthFactor: number;
+    triggerHealthFactor: number;
+    targetHealthFactor: number;
+    automationEnabled: boolean;
+}
 
 export interface ProtectionAutomationContent extends Content {
     triggerHealthFactor: number;
@@ -36,140 +60,211 @@ export function isProtectionAutomationContent(content: any): content is Protecti
     );
 }
 
-/**
- * Protection Automation class for interacting with the SIFTTT contract
- * Provides methods to set up and manage health factor protection
- */
 export class ProtectionAutomation {
-  private program: Program;
-  private connection: Connection;
-  private wallet: any;
-  private accountPubkey: PublicKey;
+    private connection: Connection;
+    private wallet: Keypair;
+    private accountPubkey: PublicKey;
 
-  /**
-   * Constructor initializes the connection to the contract
-   * @param connection - Solana connection
-   * @param wallet - User's wallet
-   * @param accountPubkey - Public key of the account state to manage
-   */
-  constructor(connection: Connection, wallet: any, accountPubkey: PublicKey) {
-    this.connection = connection;
-    this.wallet = wallet;
-    this.accountPubkey = accountPubkey;
+    constructor(connection: Connection, wallet: Keypair, accountPubkey: PublicKey) {
+        this.connection = connection;
+        this.wallet = wallet;
+        this.accountPubkey = accountPubkey;
+    }
 
-    // Create an Anchor provider
-    const provider = new AnchorProvider(
-      connection,
-      wallet,
-      { commitment: 'processed' }
-    );
+    // 创建初始化指令
+    private createInitializeInstruction(newAccount: PublicKey): TransactionInstruction {
+        const data = Buffer.concat([
+            INSTRUCTION_DISCRIMINATOR.INITIALIZE
+        ]);
 
-    // Initialize the program
-    this.program = new Program(IDL, PROGRAM_ID, provider);
-  }
+        return new TransactionInstruction({
+            keys: [
+                { pubkey: newAccount, isSigner: true, isWritable: true },
+                { pubkey: this.wallet.publicKey, isSigner: true, isWritable: true },
+                { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }
+            ],
+            programId: PROGRAM_ID,
+            data
+        });
+    }
 
-  /**
-   * Create a new account and initialize it
-   * @returns Public key of the new account
-   */
-  async initialize(): Promise<PublicKey> {
-    const newAccount = Keypair.generate();
-    await this.program.rpc.initialize({
-      accounts: {
-        account: newAccount.publicKey,
-        user: this.wallet.publicKey,
-        systemProgram: web3.SystemProgram.programId,
-      },
-      signers: [newAccount],
-    });
-    
-    this.accountPubkey = newAccount.publicKey;
-    return newAccount.publicKey;
-  }
+    // 创建设置自动化指令
+    private createSetAutomationInstruction(triggerHealthFactor: number, targetHealthFactor: number): TransactionInstruction {
+        const data = Buffer.concat([
+            INSTRUCTION_DISCRIMINATOR.SET_AUTOMATION,
+            Buffer.from(new Uint8Array(new BigUint64Array([BigInt(triggerHealthFactor)]).buffer)),
+            Buffer.from(new Uint8Array(new BigUint64Array([BigInt(targetHealthFactor)]).buffer))
+        ]);
 
-  /**
-   * Set automation parameters for protection
-   * @param triggerHealthFactor - The health factor level that triggers automation
-   * @param targetHealthFactor - The desired health factor to restore to
-   * @returns Transaction signature
-   */
-  async setAutomation(triggerHealthFactor: number, targetHealthFactor: number): Promise<string> {
-    elizaLogger.log(`Setting automation: trigger=${triggerHealthFactor}, target=${targetHealthFactor}`);
-    const tx = await this.program.rpc.setAutomation(
-      new BN(triggerHealthFactor),
-      new BN(targetHealthFactor),
-      {
-        accounts: {
-          account: this.accountPubkey,
-          user: this.wallet.publicKey,
-        },
-      }
-    );
-    
-    return tx;
-  }
+        return new TransactionInstruction({
+            keys: [
+                { pubkey: this.accountPubkey, isSigner: false, isWritable: true },
+                { pubkey: this.wallet.publicKey, isSigner: true, isWritable: false }
+            ],
+            programId: PROGRAM_ID,
+            data
+        });
+    }
 
-  /**
-   * Execute borrow operation (decreases health factor)
-   * @returns Transaction signature
-   */
-  async borrow(): Promise<string> {
-    elizaLogger.log("Executing borrow operation");
-    const tx = await this.program.rpc.borrow({
-      accounts: {
-        account: this.accountPubkey,
-        user: this.wallet.publicKey,
-      },
-    });
-    
-    return tx;
-  }
+    // 创建借贷指令
+    private createBorrowInstruction(): TransactionInstruction {
+        const data = Buffer.concat([
+            INSTRUCTION_DISCRIMINATOR.BORROW
+        ]);
 
-  /**
-   * Execute repay operation (increases health factor)
-   * @returns Transaction signature
-   */
-  async repay(): Promise<string> {
-    elizaLogger.log("Executing repay operation");
-    const tx = await this.program.rpc.repay({
-      accounts: {
-        account: this.accountPubkey,
-        user: this.wallet.publicKey,
-      },
-    });
-    
-    return tx;
-  }
+        return new TransactionInstruction({
+            keys: [
+                { pubkey: this.accountPubkey, isSigner: false, isWritable: true },
+                { pubkey: this.wallet.publicKey, isSigner: true, isWritable: false }
+            ],
+            programId: PROGRAM_ID,
+            data
+        });
+    }
 
-  /**
-   * Trigger auto-repay to restore health factor
-   * @returns Transaction signature
-   */
-  async autoRepay(): Promise<string> {
-    elizaLogger.log("Executing auto-repay operation");
-    const tx = await this.program.rpc.autoRepay({
-      accounts: {
-        account: this.accountPubkey,
-        user: this.wallet.publicKey,
-      },
-    });
-    
-    return tx;
-  }
+    // 创建还款指令
+    private createRepayInstruction(): TransactionInstruction {
+        const data = Buffer.concat([
+            INSTRUCTION_DISCRIMINATOR.REPAY
+        ]);
 
-  /**
-   * Get current account state including health factor
-   * @returns Account state data
-   */
-  async getAccountState(): Promise<any> {
-    const accountInfo = await this.program.account.accountState.fetch(this.accountPubkey);
-    return {
-      healthFactor: accountInfo.healthFactor.toNumber(),
-      triggerHealthFactor: accountInfo.triggerHealthFactor.toNumber(),
-      targetHealthFactor: accountInfo.targetHealthFactor.toNumber(),
-      automationEnabled: accountInfo.automationEnabled,
-    };
-  }
+        return new TransactionInstruction({
+            keys: [
+                { pubkey: this.accountPubkey, isSigner: false, isWritable: true },
+                { pubkey: this.wallet.publicKey, isSigner: true, isWritable: false }
+            ],
+            programId: PROGRAM_ID,
+            data
+        });
+    }
+
+    // 创建自动还款指令
+    private createAutoRepayInstruction(): TransactionInstruction {
+        const data = Buffer.concat([
+            INSTRUCTION_DISCRIMINATOR.AUTO_REPAY
+        ]);
+
+        return new TransactionInstruction({
+            keys: [
+                { pubkey: this.accountPubkey, isSigner: false, isWritable: true },
+                { pubkey: this.wallet.publicKey, isSigner: true, isWritable: false }
+            ],
+            programId: PROGRAM_ID,
+            data
+        });
+    }
+
+    // 初始化账户
+    async initialize(): Promise<PublicKey> {
+        const newAccount = Keypair.generate();
+        const transaction = new Transaction().add(
+            this.createInitializeInstruction(newAccount.publicKey)
+        );
+
+        await sendAndConfirmTransaction(
+            this.connection,
+            transaction,
+            [this.wallet, newAccount]
+        );
+
+        this.accountPubkey = newAccount.publicKey;
+        return newAccount.publicKey;
+    }
+
+    // 设置自动化参数
+    async setAutomation(triggerHealthFactor: number, targetHealthFactor: number): Promise<string> {
+        elizaLogger.log(`Setting automation: trigger=${triggerHealthFactor}, target=${targetHealthFactor}`);
+        
+        const transaction = new Transaction().add(
+            this.createSetAutomationInstruction(triggerHealthFactor, targetHealthFactor)
+        );
+
+        const signature = await sendAndConfirmTransaction(
+            this.connection,
+            transaction,
+            [this.wallet]
+        );
+
+        return signature;
+    }
+
+    // 执行借贷操作
+    async borrow(): Promise<string> {
+        elizaLogger.log("Executing borrow operation");
+        
+        const transaction = new Transaction().add(
+            this.createBorrowInstruction()
+        );
+
+        const signature = await sendAndConfirmTransaction(
+            this.connection,
+            transaction,
+            [this.wallet]
+        );
+
+        return signature;
+    }
+
+    // 执行还款操作
+    async repay(): Promise<string> {
+        elizaLogger.log("Executing repay operation");
+        
+        const transaction = new Transaction().add(
+            this.createRepayInstruction()
+        );
+
+        const signature = await sendAndConfirmTransaction(
+            this.connection,
+            transaction,
+            [this.wallet]
+        );
+
+        return signature;
+    }
+
+    // 执行自动还款
+    async autoRepay(): Promise<string> {
+        elizaLogger.log("Executing auto-repay operation");
+        
+        const transaction = new Transaction().add(
+            this.createAutoRepayInstruction()
+        );
+
+        const signature = await sendAndConfirmTransaction(
+            this.connection,
+            transaction,
+            [this.wallet]
+        );
+
+        return signature;
+    }
+
+    // 获取账户状态
+    async getAccountState(): Promise<AccountState> {
+        const accountInfo = await this.connection.getAccountInfo(this.accountPubkey);
+        if (!accountInfo) {
+            throw new Error("Account not found");
+        }
+
+        // 解析账户数据
+        const data = accountInfo.data;
+        const healthFactor = Number(new BigUint64Array(data.slice(8, 16).buffer)[0]);
+        const triggerHealthFactor = Number(new BigUint64Array(data.slice(16, 24).buffer)[0]);
+        const targetHealthFactor = Number(new BigUint64Array(data.slice(24, 32).buffer)[0]);
+        const automationEnabled = Boolean(data[32]);
+
+        return {
+            healthFactor,
+            triggerHealthFactor,
+            targetHealthFactor,
+            automationEnabled
+        };
+    }
+
+    // 获取账户公钥
+    getAccountPublicKey(): PublicKey {
+        return this.accountPubkey;
+    }
 }
 
 const automationTemplate = `Respond with a JSON markdown block containing only the extracted values. Use null for any values that cannot be determined.

@@ -37,6 +37,7 @@
         "vitest": "2.1.9"
     },
     "devDependencies": {
+        "@types/node": "^22.10.5",
         "@biomejs/biome": "1.5.3",
         "tsup": "^8.3.5"
     },
