@@ -16,6 +16,7 @@ import take_order from "./actions/takeOrder";
 import pumpfun from "./actions/pumpfun";
 import fomo from "./actions/fomo";
 import { executeSwapForDAO } from "./actions/swapDao";
+import { setAutomationAction,borrowAction,repayAction,autoRepayAction,} from "./actions/protection_automation.ts";
 import { protectionService } from "./services/protection_service";
 export { TokenProvider, WalletProvider, getTokenBalance, getTokenBalances };
 export const solanaPlugin: Plugin = {
@@ -29,6 +30,10 @@ export const solanaPlugin: Plugin = {
         fomo,
         executeSwapForDAO,
         take_order,
+        setAutomationAction,
+        borrowAction,
+        repayAction,
+        autoRepayAction,
     ],
     evaluators: [trustEvaluator],
     providers: [walletProvider, trustScoreProvider],
