@@ -4,25 +4,29 @@ import { settings } from "@elizaos/core";
 import bs58 from "bs58";
 import { elizaLogger } from "@elizaos/core";
 import { ProtectionAutomation } from "../actions/protection_automation";
+import { DCAAutomation } from "../actions/dca";
+import { PriceTradeAutomation } from "../actions/price_trade";
+import { mockPriceService } from "./mock_price_service";
 
 export class ProtectionService extends Service {
-    //static serviceType: ServiceType = ServiceType.TRANSCRIPTION;
-
     private connection: Connection;
     private wallet: Keypair;
     private automation: ProtectionAutomation | null = null;
+    private dcaAutomation: DCAAutomation | null = null;
+    private priceTradeAutomation: PriceTradeAutomation | null = null;
     private checkInterval: NodeJS.Timeout | null = null;
     private readonly CHECK_INTERVAL_MS = 60000; // 每分钟检查一次
+    private lastDCATime: number = 0; // 记录上次DCA执行时间
 
     constructor() {
-        super("ProtectionService");
+        super();
         this.connection = new Connection(settings.SOLANA_RPC_URL!, {
             commitment: "confirmed",
         });
     }
 
     get serviceType(): ServiceType {
-      return ServiceType.TRANSCRIPTION;
+        return ServiceType.TRANSCRIPTION;
     }
 
     async initialize(): Promise<void> {
@@ -43,11 +47,25 @@ export class ProtectionService extends Service {
                 throw new Error("No SIFTTT account found in settings");
             }
 
-            // 初始化自动化实例
+            const accountPublicKey = new PublicKey(accountPubkey);
+
+            // 初始化各个自动化实例
             this.automation = new ProtectionAutomation(
                 this.connection,
                 this.wallet,
-                new PublicKey(accountPubkey)
+                accountPublicKey
+            );
+
+            this.dcaAutomation = new DCAAutomation(
+                this.connection,
+                this.wallet,
+                accountPublicKey
+            );
+
+            this.priceTradeAutomation = new PriceTradeAutomation(
+                this.connection,
+                this.wallet,
+                accountPublicKey
             );
 
             // 启动定时检查
@@ -68,6 +86,8 @@ export class ProtectionService extends Service {
         this.checkInterval = setInterval(async () => {
             try {
                 await this.checkAndTriggerProtection();
+                await this.checkAndExecuteDCA();
+                await this.checkAndExecutePriceTrade();
             } catch (error) {
                 elizaLogger.error("Error in health check:", error);
             }
@@ -78,7 +98,7 @@ export class ProtectionService extends Service {
 
     private async checkAndTriggerProtection(): Promise<void> {
         if (!this.automation) {
-            elizaLogger.error("Automation not initialized");
+            elizaLogger.error("Protection automation not initialized");
             return;
         }
 
@@ -92,7 +112,6 @@ export class ProtectionService extends Service {
                 automationEnabled: state.automationEnabled
             });
 
-            // 检查是否需要触发保护
             if (state.automationEnabled && 
                 state.healthFactor <= state.triggerHealthFactor) {
                 
@@ -109,6 +128,96 @@ export class ProtectionService extends Service {
             }
         } catch (error) {
             elizaLogger.error("Error checking protection status:", error);
+        }
+    }
+
+    private async checkAndExecuteDCA(): Promise<void> {
+        if (!this.dcaAutomation) {
+            elizaLogger.error("DCA automation not initialized");
+            return;
+        }
+
+        try {
+            // 获取账户状态
+            const accountInfo = await this.connection.getAccountInfo(this.dcaAutomation.getAccountPublicKey());
+            if (!accountInfo) {
+                throw new Error("Account not found");
+            }
+
+            // 解析账户数据
+            const data = accountInfo.data;
+            const dcaInterval = Number(new BigUint64Array(data.slice(40, 48).buffer)[0]);
+            const dcaEnabled = Boolean(data[88]);
+            const tokenAddress = new PublicKey(data.slice(48, 80));
+            const tokenAmount = Number(new BigUint64Array(data.slice(80, 88).buffer)[0]);
+
+            if (!dcaEnabled || dcaInterval <= 0) {
+                return;
+            }
+
+            const now = Date.now();
+            if (now - this.lastDCATime >= dcaInterval * 1000) {
+                elizaLogger.log("Executing DCA...");
+                
+                const tx = await this.dcaAutomation.mockBuy(tokenAddress, tokenAmount);
+                this.lastDCATime = now;
+                
+                elizaLogger.log("DCA executed successfully", {
+                    transaction: tx,
+                    tokenAddress: tokenAddress.toString(),
+                    tokenAmount
+                });
+            }
+        } catch (error) {
+            elizaLogger.error("Error checking DCA status:", error);
+        }
+    }
+
+    private async checkAndExecutePriceTrade(): Promise<void> {
+        if (!this.priceTradeAutomation) {
+            elizaLogger.error("Price trade automation not initialized");
+            return;
+        }
+
+        try {
+            // 获取账户状态
+            const accountInfo = await this.connection.getAccountInfo(this.priceTradeAutomation.getAccountPublicKey());
+            if (!accountInfo) {
+                throw new Error("Account not found");
+            }
+
+            // 解析账户数据
+            const data = accountInfo.data;
+            const targetPrice = Number(new BigUint64Array(data.slice(89, 97).buffer)[0]);
+            const priceTradingEnabled = Boolean(data[137]);
+            const tokenAddress = new PublicKey(data.slice(97, 129));
+            const tokenAmount = Number(new BigUint64Array(data.slice(129, 137).buffer)[0]);
+
+            if (!priceTradingEnabled || targetPrice <= 0) {
+                return;
+            }
+
+            // 获取当前价格
+            const currentPrice = mockPriceService.getCurrentPrice(tokenAddress.toString());
+            
+            if (currentPrice <= targetPrice) {
+                elizaLogger.log("Price condition met, executing trade...", {
+                    currentPrice,
+                    targetPrice
+                });
+                
+                const tx = await this.priceTradeAutomation.executePriceTrade(currentPrice);
+                
+                elizaLogger.log("Price trade executed successfully", {
+                    transaction: tx,
+                    currentPrice,
+                    targetPrice,
+                    tokenAddress: tokenAddress.toString(),
+                    tokenAmount
+                });
+            }
+        } catch (error) {
+            elizaLogger.error("Error checking price trade status:", error);
         }
     }
 
