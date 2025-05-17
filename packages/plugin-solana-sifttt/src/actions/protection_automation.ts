@@ -27,7 +27,7 @@ import {
 import { walletProvider } from "../providers/wallet";
 
 // Contract program ID
-const PROGRAM_ID = new PublicKey('BcVC4hSBRyhAcgbLJPkcTYQrZuNHnss8mPCse2C3FGFT');
+const PROGRAM_ID = new PublicKey(process.env.SIFTTT_PROGRAM_ID || 'BU5JMEZ6mwqjSBMWTrh2NF96SMHdjz5JU3nk526LjPdA');
 
 // 指令的discriminator
 const INSTRUCTION_DISCRIMINATOR = {
@@ -241,11 +241,13 @@ export class ProtectionAutomation {
 
     // 获取账户状态
     async getAccountState(): Promise<AccountState> {
+        //elizaLogger.error("@@@ in getAccountState...");
         const accountInfo = await this.connection.getAccountInfo(this.accountPubkey);
         if (!accountInfo) {
+            //elizaLogger.error("@@@ Account not found...");
             throw new Error("Account not found");
         }
-
+        //elizaLogger.error("@@@ after getAccountInfo...");
         // 解析账户数据
         const data = accountInfo.data;
         const healthFactor = Number(new BigUint64Array(data.slice(8, 16).buffer)[0]);
