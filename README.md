@@ -65,9 +65,7 @@ SIFTTT is open source and welcomes community contributions:
 
 SIFTTT aims to build a sustainable business through:
 - Freemium model with basic features free
-- Premium features for advanced automation
-- API access for institutional users
-- Transaction fee sharing for automated trades
+- Subscribed members can use advanced features of advanced automation
 
 ## Getting Started
 
