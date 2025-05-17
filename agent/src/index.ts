@@ -23,6 +23,7 @@ import {
 import { defaultCharacter } from "./defaultCharacter.ts";
 
 import { bootstrapPlugin } from "@elizaos/plugin-bootstrap";
+import { solanaPlugin } from "@elizaos/plugin-solana-sifttt";
 import JSON5 from "json5";
 
 import fs from "fs";
@@ -638,6 +639,7 @@ export async function initializeClients(
     // const clientTypes = clients.map((c) => c.name);
     // elizaLogger.log("initializeClients", clientTypes, "for", character.name);
 
+    elizaLogger.log("@@@@ character.plugins", character.plugins)
     if (character.plugins?.length > 0) {
         for (const plugin of character.plugins) {
             if (plugin.clients) {
@@ -664,7 +666,8 @@ export async function createAgent(
         evaluators: [],
         character,
         // character.plugins are handled when clients are added
-        plugins: [bootstrapPlugin].flat().filter(Boolean),
+        plugins: [bootstrapPlugin, solanaPlugin].flat().filter(Boolean),
+        //plugins: [bootstrapPlugin].flat().filter(Boolean),
         providers: [],
         managers: [],
         fetch: logFetch,
