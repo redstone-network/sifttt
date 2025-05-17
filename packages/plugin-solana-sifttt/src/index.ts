@@ -17,6 +17,8 @@ import pumpfun from "./actions/pumpfun";
 import fomo from "./actions/fomo";
 import { executeSwapForDAO } from "./actions/swapDao";
 import { setAutomationAction,borrowAction,repayAction,autoRepayAction,} from "./actions/protection_automation.ts";
+import { setDCAAction,mockBuyAction } from "./actions/dca.ts";
+import { setPriceTradingAction,executePriceTradeAction } from "./actions/price_trade.ts";
 import { protectionService } from "./services/protection_service";
 export { TokenProvider, WalletProvider, getTokenBalance, getTokenBalances };
 export const solanaPlugin: Plugin = {
@@ -34,6 +36,8 @@ export const solanaPlugin: Plugin = {
         borrowAction,
         repayAction,
         autoRepayAction,
+        setDCAAction,
+        setPriceTradingAction,
     ],
     evaluators: [trustEvaluator],
     providers: [walletProvider, trustScoreProvider],
